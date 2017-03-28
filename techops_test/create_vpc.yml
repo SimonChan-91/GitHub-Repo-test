@@ -1,0 +1,118 @@
+---
+#
+- hosts: localhost
+  connection: local
+
+- name: Setting up AWS
+  hosts: localhost
+  vars_files:
+    - "group_vars/common.yml" #Adding the common variable file
+
+  tasks:
+  - name: Create a new VPC
+    ec2_vpc:
+      region: "{{ var_region }}" #Select a region where instance should be deployed
+      dns_support: True
+      resource_tags: { Name: "{{ var_env }}-vpc", Environment: "{{ var_env }}" }
+      cidr_block: "{{ var_cidr }}"
+      internet_gateway: True
+      subnets:
+        - cidr: "{{ var_cidr_net1 }}"
+          az: "{{ var_region_a }}"
+        - cidr: "{{ var_cidr_net2 }}"
+          az: "{{ var_region_b }}"
+      route_tables:
+        - subnets:
+          - "{{ var_cidr_net1 }}"
+          - "{{ var_cidr_net2 }}"
+          routes:
+            - dest: 0.0.0.0/0
+              gw: igw
+      wait: yes
+    register: the_vpc
+
+  - set_fact: the_cidr_net1="{{ the_vpc.subnets[0].id }}"
+  - set_fact: the_cidr_net2="{{ the_vpc.subnets[1].id }}"
+
+  - name: Security Group
+    ec2_group:
+      name: "{{ var_group }}"
+      description: an example EC2 group
+      vpc_id: "{{ the_vpc.vpc_id }}"
+      region: "{{ var_region }}"
+      rules:
+        - proto: tcp
+          from_port: 80
+          to_port: 80
+          cidr_ip: 0.0.0.0/0
+      rules_egress:
+        - proto: all
+          cidr_ip: 0.0.0.0/0
+    register: the_group 
+
+  - name: Create an instance
+    ec2: 
+      key_name: "{{ var_keyp }}" #SSH KeyPair to use on the instance
+      region: "{{ var_region }}"
+      instance_type: "{{ var_intt }}" #Selecting the free tier type
+      image: "{{ var_img }}" #Selecting Ubuntu Server 16.04
+      wait: yes #Wait for the instance to reach its desired state before returning. 
+      group: "{{ var_group }}" #Assign a security group
+      count: 1 #Creating one instance
+      instance_tags:
+        Name: webserver01 #Naming the instance
+      vpc_subnet_id: "{{  the_cidr_net1 }}"
+      user_data: |
+                 #!/bin/sh
+                 apt-get install nginx -y
+                 service nginx start
+    register: the_instance1
+
+
+  - name: Create an instance
+    ec2:
+      key_name: "{{ var_keyp }}"
+      region: "{{ var_region }}"
+      instance_type: "{{ var_intt }}"
+      image: "{{ var_img }}"
+      wait: yes 
+      group: "{{ var_group }}"
+      count: 1
+      instance_tags:
+        Name: webserver02
+      vpc_subnet_id: "{{  the_cidr_net2 }}"
+    register: the_instance2
+
+  #- name: Create subnet for instances
+    #ec2_vpc_subnet:
+      #state: present
+      #vpc_id: "{{ var_env }}-vpc"
+      #cidr: 10.10.2.0/16
+      #resource_tags:
+         #Name: Subnet02
+    #register: Subnet022
+
+  - name: Create Load Balancer
+    ec2_elb_lb:
+      name: "ELB"
+      state: present
+      region: "{{ var_region }}"
+      subnets:
+        - "{{ the_cidr_net1 }}"
+        - "{{ the_cidr_net2 }}"
+      security_group_ids: "{{ the_group.group_id }}"
+      listeners:
+        - protocol: http
+          load_balancer_port: 80
+          instance_port: 80
+      instance_ids:
+        - "{{ the_instance1.instance_ids[0] }}"
+        - "{{ the_instance2.instance_ids[0] }}"
+      health_check:
+         ping_protocol: http # options are http, https, ssl, tcp
+         ping_port: 80
+         ping_path: "/index.html" # not required for tcp or ssl
+         response_timeout: 5 # seconds
+         interval: 30 # seconds
+         unhealthy_threshold: 2
+         healthy_threshold: 10

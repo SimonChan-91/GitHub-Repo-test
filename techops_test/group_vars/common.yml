@@ -1,0 +1,15 @@
+---
+var_region: eu-west-2
+var_region_a: eu-west-2a
+var_region_b: eu-west-2b
+var_env: simon-dev
+var_cidr: 10.0.0.0/16
+var_cidr_net1: 10.0.1.0/24
+var_cidr_net2: 10.0.2.0/24
+var_intt: t2.micro
+var_img: ami-ede2e889
+var_grp: default
+var_group: group1
+var_keyp: M_Webserver
+
+

@@ -1,0 +1,29 @@
+---
+- hosts: localhost
+  connection: local
+
+- name: creating an ec2 instance
+  ec2:
+     Key_name: TesT
+     region: eu-west-2
+     instant_type: t2.micro
+     image: ami-ede2e889 
+     count: 1
+     instant_tags: TesT2
+     Name: Webserver01
+     Owner: Simon
+     assign_public_ip: yes
+
+#host ip or DNS
+
+# SSH KeyPair
+# Select a region where instance should be deployed
+# Selecting the free tier type
+# Selecting Ubuntu Server 16.04 LTS (HVM), SSD Volume Type  
+# Creating one instance
+# The tag you want to give to the instance
+# Name of the instance
+# Can name who created this instance
+# Assigning an elastic ipv4 address
+
+...
